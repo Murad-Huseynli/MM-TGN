@@ -440,15 +440,25 @@ def evaluate_ranking(
         # Restore memory (positive scoring updated it)
         model.restore_memory(batch_memory_backup)
         
+        # Free GPU memory before negative scoring
+        del pos_prob
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
         # =====================================================================
         # NEGATIVE SCORES: Batched computation (OPTIMIZED)
         # Process negatives in chunks to avoid GPU OOM
         # =====================================================================
         
-        # Process negatives in chunks of neg_chunk_size to manage GPU memory
-        # With batch_size=200 and neg_chunk=20, each forward pass = 4000 samples
-        neg_chunk_size = 20  # Process 20 negatives at a time
+        # Process negatives in smaller chunks to avoid GPU OOM
+        # With batch_size=200 and neg_chunk=5, each forward pass = 1000 samples
+        # (Reduced from 20 to 5 due to OOM during attention computation)
+        neg_chunk_size = 5  # Process 5 negatives at a time (conservative for GPU memory)
         batch_neg_scores = np.zeros((batch_size_actual, n_negatives), dtype=np.float32)
+        
+        # Clear GPU cache before negative scoring
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         for chunk_start in range(0, n_negatives, neg_chunk_size):
             chunk_end = min(chunk_start + neg_chunk_size, n_negatives)
@@ -859,13 +869,18 @@ def train(args):
     if args.eval_ranking:
         logger.info("\n📊 Ranking Metrics (100 negatives per positive):")
         
+        # Use smaller batch size for ranking eval to avoid GPU OOM
+        # (Ranking eval expands batch × negatives which uses more memory)
+        ranking_batch_size = min(args.batch_size, 100)
+        logger.info(f"  Using batch_size={ranking_batch_size} for ranking eval (OOM prevention)")
+        
         memory_backup = model.backup_memory()
         
         test_ranking_metrics = evaluate_ranking(
             model=model,
             data=test_data,
             all_items=all_items,
-            batch_size=args.batch_size,
+            batch_size=ranking_batch_size,
             n_neighbors=args.n_neighbors,
             n_negatives=args.n_neg_eval,
             device=device,
@@ -918,7 +933,7 @@ def train(args):
                 model=model,
                 data=transductive_test_data,
                 all_items=all_items,
-                batch_size=args.batch_size,
+                batch_size=ranking_batch_size,  # Smaller batch for OOM prevention
                 n_neighbors=args.n_neighbors,
                 n_negatives=args.n_neg_eval,
                 device=device,
@@ -966,7 +981,7 @@ def train(args):
                 model=model,
                 data=inductive_test_data,
                 all_items=all_items,
-                batch_size=args.batch_size,
+                batch_size=ranking_batch_size,  # Smaller batch for OOM prevention
                 n_neighbors=args.n_neighbors,
                 n_negatives=args.n_neg_eval,
                 device=device,
