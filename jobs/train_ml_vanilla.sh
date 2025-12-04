@@ -38,7 +38,7 @@ python train_mmtgn.py \
     --batch-size 200 \
     --epochs 50 \
     --lr 1e-4 \
-    --loss bce \
+    --loss bpr \
     --patience 5 \
     --eval-ranking \
     --n-neg-eval 100 \
