@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gpus=1
 #SBATCH --mem=64G
-#SBATCH --time=08:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/train_ml_sota_film_%j.out
 #SBATCH --error=logs/train_ml_sota_film_%j.err
 
@@ -41,7 +41,7 @@ python train_mmtgn.py \
     --lr 1e-4 \
     --loss bpr \
     --patience 5 \
-    --eval-ranking \
+    --no-eval-ranking \
     --n-neg-eval 100 \
     --run-name "ml_sota_film_$(date +%Y%m%d)"
 

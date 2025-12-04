@@ -1,55 +1,100 @@
 #!/bin/bash
 # ==============================================================================
-# Submit All ML-Modern Experiments
-# ==============================================================================
-# Usage: ./jobs/submit_all_ml.sh
+# Submit All MovieLens Experiments
+# 
+# This script submits training jobs. Evaluation jobs should be submitted
+# AFTER training completes to run comprehensive ranking metrics.
 #
-# This submits all ablation experiments for MovieLens:
-# 1. Vanilla (random features) - Lower bound
-# 2. SOTA + MLP fusion - Default
-# 3. SOTA + FiLM fusion - Text modulates image
-# 4. SOTA + Gated fusion - Learned attention
+# Strategy:
+#   1. Training jobs: Fast (4h), no ranking eval
+#   2. Evaluation jobs: Comprehensive ranking metrics (6h)
 # ==============================================================================
 
 cd /scratch/cse576f25s001_class_root/cse576f25s001_class/huseynli/mm-tgn
 
-echo "📦 Submitting ML-Modern Ablation Experiments"
-echo "============================================="
+echo "=" * 60
+echo "MM-TGN MovieLens Experiment Suite"
+echo "=" * 60
 echo ""
 
-# Create logs directory
-mkdir -p logs
+# Check if jobs directory exists
+if [ ! -d "jobs" ]; then
+    echo "❌ jobs/ directory not found!"
+    exit 1
+fi
 
-# 1. Vanilla baseline
-echo "1/4: Vanilla (random features)..."
-JOB1=$(sbatch jobs/train_ml_vanilla.sh | awk '{print $4}')
-echo "     Submitted: Job $JOB1"
+# ==============================================================================
+# PHASE 1: TRAINING JOBS
+# ==============================================================================
 
-# 2. SOTA + MLP (default)
-echo "2/4: SOTA + MLP fusion..."
-JOB2=$(sbatch jobs/train_ml_sota.sh | awk '{print $4}')
-echo "     Submitted: Job $JOB2"
+echo "📦 PHASE 1: Submitting TRAINING jobs..."
+echo ""
 
-# 3. SOTA + FiLM
-echo "3/4: SOTA + FiLM fusion..."
-JOB3=$(sbatch jobs/train_ml_sota_film.sh | awk '{print $4}')
-echo "     Submitted: Job $JOB3"
+# Vanilla baseline (random features)
+echo "1/4 Submitting: Vanilla (Random Features)"
+JOB_VANILLA=$(sbatch jobs/train_ml_vanilla.sh | awk '{print $4}')
+echo "    Job ID: $JOB_VANILLA"
 
-# 4. SOTA + Gated
-echo "4/4: SOTA + Gated fusion..."
-JOB4=$(sbatch jobs/train_ml_sota_gated.sh | awk '{print $4}')
-echo "     Submitted: Job $JOB4"
+# SOTA + MLP fusion
+echo "2/4 Submitting: SOTA + MLP Fusion"
+JOB_SOTA=$(sbatch jobs/train_ml_sota.sh | awk '{print $4}')
+echo "    Job ID: $JOB_SOTA"
+
+# SOTA + FiLM fusion
+echo "3/4 Submitting: SOTA + FiLM Fusion"
+JOB_FILM=$(sbatch jobs/train_ml_sota_film.sh | awk '{print $4}')
+echo "    Job ID: $JOB_FILM"
+
+# SOTA + Gated fusion
+echo "4/4 Submitting: SOTA + Gated Fusion"
+JOB_GATED=$(sbatch jobs/train_ml_sota_gated.sh | awk '{print $4}')
+echo "    Job ID: $JOB_GATED"
 
 echo ""
-echo "============================================="
-echo "✅ All jobs submitted!"
+echo "✅ Training jobs submitted!"
 echo ""
-echo "Monitor progress:"
-echo "  squeue -u \$USER"
+echo "=" * 60
+echo "TRAINING JOB IDs:"
+echo "=" * 60
+echo "  Vanilla:     $JOB_VANILLA"
+echo "  SOTA+MLP:    $JOB_SOTA"
+echo "  SOTA+FiLM:   $JOB_FILM"
+echo "  SOTA+Gated:  $JOB_GATED"
 echo ""
-echo "View logs:"
-echo "  tail -f logs/train_ml_*.out"
-echo ""
-echo "Results will be saved to:"
-echo "  checkpoints/<run_name>/results.json"
 
+# ==============================================================================
+# PHASE 2: EVALUATION JOBS (submit after training)
+# ==============================================================================
+
+echo "=" * 60
+echo "PHASE 2: EVALUATION JOBS"
+echo "=" * 60
+echo ""
+echo "⚠️  Submit evaluation jobs AFTER training completes:"
+echo ""
+echo "    sbatch --dependency=afterok:$JOB_VANILLA jobs/eval_ml_vanilla.sh"
+echo "    sbatch --dependency=afterok:$JOB_SOTA jobs/eval_ml_sota.sh"
+echo "    sbatch --dependency=afterok:$JOB_FILM jobs/eval_ml_sota_film.sh"
+echo "    sbatch --dependency=afterok:$JOB_GATED jobs/eval_ml_sota_gated.sh"
+echo ""
+echo "Or submit all evaluation jobs after all training completes:"
+echo ""
+echo "    sbatch --dependency=afterok:$JOB_VANILLA:$JOB_SOTA:$JOB_FILM:$JOB_GATED jobs/eval_ml_vanilla.sh"
+echo "    sbatch --dependency=afterok:$JOB_VANILLA:$JOB_SOTA:$JOB_FILM:$JOB_GATED jobs/eval_ml_sota.sh"
+echo "    sbatch --dependency=afterok:$JOB_VANILLA:$JOB_SOTA:$JOB_FILM:$JOB_GATED jobs/eval_ml_sota_film.sh"
+echo "    sbatch --dependency=afterok:$JOB_VANILLA:$JOB_SOTA:$JOB_FILM:$JOB_GATED jobs/eval_ml_sota_gated.sh"
+echo ""
+
+# ==============================================================================
+# MONITORING
+# ==============================================================================
+
+echo "=" * 60
+echo "MONITORING"
+echo "=" * 60
+echo ""
+echo "Check job status:  squeue -u \$USER"
+echo "View train logs:   tail -f logs/train_ml_*_<jobid>.out"
+echo "View eval logs:    tail -f logs/eval_ml_*_<jobid>.out"
+echo "Cancel all:        scancel $JOB_VANILLA $JOB_SOTA $JOB_FILM $JOB_GATED"
+echo ""

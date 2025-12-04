@@ -1,0 +1,54 @@
+#!/bin/bash
+#SBATCH --job-name=eval_ml_vanilla
+#SBATCH --account=cse576f25s001_class
+#SBATCH --partition=gpu_mig40,gpu,spgpu
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=06:00:00
+#SBATCH --output=logs/eval_ml_vanilla_%j.out
+#SBATCH --error=logs/eval_ml_vanilla_%j.err
+
+# ==============================================================================
+# MM-TGN Evaluation: MovieLens VANILLA
+# Separate evaluation job for comprehensive ranking metrics
+# ==============================================================================
+
+echo "📊 MM-TGN Evaluation: ML-Modern VANILLA"
+echo "Date: $(date)"
+echo "Node: $(hostname)"
+echo ""
+
+cd /scratch/cse576f25s001_class_root/cse576f25s001_class/huseynli/mm-tgn
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate mmtgn
+
+mkdir -p logs
+
+# Find the latest vanilla checkpoint
+CHECKPOINT_DIR=$(ls -td checkpoints/ml_vanilla_* 2>/dev/null | head -1)
+
+if [ -z "$CHECKPOINT_DIR" ]; then
+    echo "❌ No vanilla checkpoint found!"
+    echo "   Run train_ml_vanilla.sh first"
+    exit 1
+fi
+
+CHECKPOINT="$CHECKPOINT_DIR/best_model.pt"
+echo "📦 Using checkpoint: $CHECKPOINT"
+
+python evaluate_mmtgn.py \
+    --checkpoint "$CHECKPOINT" \
+    --data-dir data/processed \
+    --dataset ml-modern \
+    --n-neg-eval 100 \
+    --eval-sample-size 5000 \
+    --batch-size 200 \
+    --ranking-batch-size 100
+
+echo ""
+echo "✅ Evaluation complete!"
+echo "📁 Results saved to: $CHECKPOINT_DIR/"
+

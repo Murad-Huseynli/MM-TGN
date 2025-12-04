@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gpus=1
 #SBATCH --mem=64G
-#SBATCH --time=06:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/train_ml_vanilla_%j.out
 #SBATCH --error=logs/train_ml_vanilla_%j.err
 
@@ -40,8 +40,7 @@ python train_mmtgn.py \
     --lr 1e-4 \
     --loss bpr \
     --patience 5 \
-    --eval-ranking \
-    --n-neg-eval 100 \
+    --no-eval-ranking \
     --run-name "ml_vanilla_$(date +%Y%m%d)"
 
 echo ""
