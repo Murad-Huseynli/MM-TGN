@@ -101,8 +101,8 @@ def evaluate_link_prediction(model, data, negative_sampler, batch_size, n_neighb
         batch_timestamps = timestamps[start:end]
         batch_edge_idxs = edge_idxs[start:end]
         
-        # Sample negatives
-        neg_destinations = negative_sampler.sample(len(batch_sources))
+        # Sample negatives (RandEdgeSampler returns tuple (src, dst), we only need dst)
+        _, neg_destinations = negative_sampler.sample(len(batch_sources))
         
         # Get probabilities
         pos_prob, neg_prob = model.compute_edge_probabilities(
