@@ -1,8 +1,8 @@
 # MM-TGN: Multimodal Temporal Graph Network
 ## Complete Architecture & API Documentation
 
-**Version**: 2.4 (BPR Loss & OOM Fix)  
-**Last Updated**: December 4, 2025  
+**Version**: 2.5 (Separate Train/Eval Pipeline & Fixed Samples)  
+**Last Updated**: December 5, 2025  
 **Research Goal**: Solve Cold Start and Concept Drift in Recommendation Systems  
 **Environment**: Great Lakes HPC (University of Michigan)
 
@@ -12,19 +12,47 @@
 ---
 
 ## Table of Contents
-1. [Evaluation Protocol](#-evaluation-protocol-for-baseline-alignment)
-2. [Research Hypothesis](#-research-hypothesis)
-3. [System Architecture](#️-system-architecture-diagram)
-4. [Indexing Standard](#-indexing-standard-critical)
-5. [Complete CLI Reference](#-complete-cli-reference)
-6. [SLURM Job Scripts](#-slurm-job-scripts)
-7. [Ready-to-Run Ablation Commands](#-ready-to-run-ablation-commands)
-8. [Data Format Specifications](#-data-format-specifications)
-9. [Core API Documentation](#-core-api-documentation)
-10. [TensorBoard Setup](#-tensorboard-setup-great-lakes-hpc)
-11. [File Dictionary](#-file-dictionary)
-12. [Known Issues & Solutions](#-known-issues--solutions)
-13. [Context Restoration](#-context-restoration-checklist)
+1. [Latest Training Results](#-latest-training-results)
+2. [Evaluation Protocol](#-evaluation-protocol-for-baseline-alignment)
+3. [Separate Training & Evaluation Pipeline](#-separate-training--evaluation-pipeline)
+4. [Research Hypothesis](#-research-hypothesis)
+5. [System Architecture](#️-system-architecture-diagram)
+6. [Indexing Standard](#-indexing-standard-critical)
+7. [Complete CLI Reference](#-complete-cli-reference)
+8. [SLURM Job Scripts](#-slurm-job-scripts)
+9. [Ready-to-Run Ablation Commands](#-ready-to-run-ablation-commands)
+10. [Data Format Specifications](#-data-format-specifications)
+11. [Core API Documentation](#-core-api-documentation)
+12. [TensorBoard Setup](#-tensorboard-setup-great-lakes-hpc)
+13. [File Dictionary](#-file-dictionary)
+14. [Known Issues & Solutions](#-known-issues--solutions)
+15. [Context Restoration](#-context-restoration-checklist)
+
+---
+
+## 📊 Latest Training Results
+
+### MovieLens (ML-Modern) - December 5, 2025
+
+| Model | Train Loss | Val AP | Val AUC | Val MRR | Best Epoch | Status |
+|-------|------------|--------|---------|---------|------------|--------|
+| **SOTA (Qwen2+SigLIP)** | 0.465 | **0.849** | **0.872** | **0.934** | 4 | ✅ Running |
+| **Vanilla (Random)** | 0.655 | 0.473 | 0.518 | 0.757 | 4 | ✅ Completed |
+
+### Key Findings
+
+1. **SOTA provides +79% improvement** over Vanilla in AP (0.849 vs 0.473)
+2. **High initial MRR (0.93)** is expected - pre-trained Qwen2/SigLIP encode rich semantics
+3. **Vanilla near random (AP~0.47, AUC~0.52)** confirms no semantic content = no learning beyond structure
+4. **Early stopping works** - Vanilla stopped at epoch 9, best model saved at epoch 4
+
+### What This Means
+
+| Comparison | Result | Interpretation |
+|------------|--------|----------------|
+| SOTA AP > Vanilla AP | 0.849 > 0.473 (+79%) | ✅ **Multimodal features help significantly** |
+| SOTA AUC > Vanilla AUC | 0.872 > 0.518 (+68%) | ✅ **Model distinguishes pos/neg much better** |
+| SOTA MRR > Vanilla MRR | 0.934 > 0.757 (+23%) | ✅ **Positive items ranked higher** |
 
 ---
 
@@ -106,6 +134,80 @@ assert test_ratio == 0.15
 assert n_negatives == 100
 assert metrics == ["Recall@10", "Recall@20", "NDCG@10", "NDCG@20", "MRR"]
 ```
+
+---
+
+## 🔄 Separate Training & Evaluation Pipeline
+
+### Why Separate?
+
+Ranking evaluation takes ~7 hours for full test set, exceeding typical GPU allocations. We split into two phases:
+
+| Phase | Time | What It Does |
+|-------|------|--------------|
+| **Training** | 3-4 hours | Train model, fast validation (AP/AUC), save checkpoint |
+| **Evaluation** | 2-6 hours | Load checkpoint, comprehensive ranking metrics |
+
+### Training Scripts (No Ranking Eval)
+
+```bash
+# Training jobs skip slow ranking eval
+sbatch jobs/train_ml_vanilla.sh    # Uses --no-eval-ranking
+sbatch jobs/train_ml_sota.sh       # Uses --no-eval-ranking
+```
+
+### Evaluation Scripts (Load Checkpoint)
+
+```bash
+# After training completes, run evaluation
+sbatch jobs/eval_ml_vanilla.sh     # Loads checkpoint, runs full ranking
+sbatch jobs/eval_ml_sota.sh
+```
+
+### Standalone Evaluation Script
+
+**`evaluate_mmtgn.py`** - Comprehensive evaluation from saved checkpoint:
+
+```bash
+python evaluate_mmtgn.py \
+    --checkpoint checkpoints/ml_vanilla_20251204/best_model.pt \
+    --data-dir data/processed \
+    --dataset ml-modern \
+    --n-neg-eval 100 \
+    --eval-sample-size 5000  # Sample for speed (None = full)
+```
+
+**What it does:**
+1. Loads trained checkpoint
+2. Warms up TGN memory with train+val data
+3. Runs link prediction (AP, AUC, MRR)
+4. Runs ranking metrics (Recall@K, NDCG@K)
+5. Evaluates transductive + inductive splits separately
+6. Saves `results_linkpred.json` and `results_full.json`
+
+### Fixed Evaluation Samples (For Fair Comparison)
+
+**⚠️ CRITICAL**: All models must evaluate on the SAME test samples!
+
+```bash
+# Generate fixed samples (seed=42 for reproducibility)
+python data/script/export_eval_samples.py \
+    --splits-dir data/splits/ml-modern \
+    --output-dir data/eval_samples \
+    --sample-size 5000 \
+    --seed 42
+```
+
+**Output files for teammates:**
+```
+data/eval_samples/
+├── ml-modern_eval_sample.csv    # 5,000 test interactions
+├── ml-modern_eval_indices.npy   # Row indices
+└── ml-modern_eval_metadata.json # Stats (seed, n_users, n_items)
+```
+
+**Tell your teammates:**
+> All baselines (LightGCN, SASRec, MMGCN) should evaluate on `data/eval_samples/ml-modern_eval_sample.csv` with 100 negatives per positive (seed=42) for fair comparison.
 
 ---
 
@@ -322,47 +424,68 @@ Item (last)  → Index 32,169
 
 ## 📦 SLURM Job Scripts
 
-Pre-configured job scripts are available in `jobs/` for easy submission:
+Pre-configured job scripts are available in `jobs/` for easy submission.
 
-### Quick Reference
+### Two-Phase Workflow
 
-| Script | Purpose | Time | Loss |
-|--------|---------|------|------|
-| `smoke_test.sh` | Quick verification (~5K samples) | 1 hour | BPR |
-| `train_ml_vanilla.sh` | Vanilla baseline (random features) | 6 hours | BPR |
-| `train_ml_sota.sh` | SOTA + MLP fusion | 8 hours | BPR |
-| `train_ml_sota_film.sh` | SOTA + FiLM fusion | 8 hours | BPR |
-| `train_ml_sota_gated.sh` | SOTA + Gated fusion | 8 hours | BPR |
-| `submit_all_ml.sh` | Submit ALL ablation experiments | - | - |
+**Phase 1: Training** (fast, no ranking eval)
+**Phase 2: Evaluation** (comprehensive metrics from checkpoint)
+
+### Training Job Scripts
+
+| Script | Purpose | Time | Notes |
+|--------|---------|------|-------|
+| `smoke_test.sh` | Quick verification | 1 hour | 1 epoch, fast eval |
+| `train_ml_vanilla.sh` | Vanilla baseline | 4 hours | `--no-eval-ranking` |
+| `train_ml_sota.sh` | SOTA + MLP | 4 hours | `--no-eval-ranking` |
+| `train_ml_sota_film.sh` | SOTA + FiLM | 4 hours | `--no-eval-ranking` |
+| `train_ml_sota_gated.sh` | SOTA + Gated | 4 hours | `--no-eval-ranking` |
+| `submit_all_ml.sh` | Submit ALL training | - | Helper script |
+
+### Evaluation Job Scripts
+
+| Script | Purpose | Time | Notes |
+|--------|---------|------|-------|
+| `eval_ml_vanilla.sh` | Evaluate vanilla | 6 hours | Loads checkpoint |
+| `eval_ml_sota.sh` | Evaluate SOTA+MLP | 6 hours | Loads checkpoint |
+| `eval_ml_sota_film.sh` | Evaluate SOTA+FiLM | 6 hours | Loads checkpoint |
+| `eval_ml_sota_gated.sh` | Evaluate SOTA+Gated | 6 hours | Loads checkpoint |
 
 ### Usage
 
 ```bash
-# Single experiment
-sbatch jobs/train_ml_sota.sh
-
-# All ablations at once (4 jobs)
+# PHASE 1: Submit training jobs
 ./jobs/submit_all_ml.sh
+# This prints job IDs and dependency commands for Phase 2
+
+# PHASE 2: Submit evaluation after training completes
+sbatch --dependency=afterok:<TRAIN_JOB_ID> jobs/eval_ml_vanilla.sh
+sbatch --dependency=afterok:<TRAIN_JOB_ID> jobs/eval_ml_sota.sh
+# etc.
 
 # Monitor
 squeue -u $USER
 tail -f logs/train_ml_*.out
+tail -f logs/eval_ml_*.out
 ```
 
-### Job Output
+### Output Structure
 
 ```
 logs/
-├── train_ml_vanilla_<jobid>.out    # Vanilla training output
-├── train_ml_sota_<jobid>.out       # SOTA+MLP output
-├── train_ml_sota_film_<jobid>.out  # SOTA+FiLM output
-└── train_ml_sota_gated_<jobid>.out # SOTA+Gated output
+├── train_ml_vanilla_<jobid>.out    # Training output
+├── train_ml_sota_<jobid>.out
+├── eval_ml_vanilla_<jobid>.out     # Evaluation output
+└── eval_ml_sota_<jobid>.out
 
 checkpoints/
-├── ml_vanilla_<date>/results.json  # Vanilla results
-├── ml_sota_mlp_<date>/results.json # SOTA+MLP results
-├── ml_sota_film_<date>/results.json
-└── ml_sota_gated_<date>/results.json
+├── ml_vanilla_<date>/
+│   ├── best_model.pt               # Saved checkpoint
+│   ├── train.log                   # Training log
+│   ├── results_partial.json        # Link prediction metrics (saved early)
+│   └── results_full.json           # All metrics (after eval job)
+├── ml_sota_mlp_<date>/
+└── ...
 ```
 
 ---
@@ -930,7 +1053,8 @@ Open: **http://localhost:6006**
 |------|-------|---------------|
 | `mmtgn.py` | ~700 | MMTGN model, FiLM fusion, loss functions, factory |
 | `dataset.py` | ~500 | TemporalDataset, temporal splits, inductive tracking |
-| `train_mmtgn.py` | ~900 | Training loop, evaluation, CLI arguments |
+| `train_mmtgn.py` | ~1000 | Training loop, evaluation, CLI arguments |
+| `evaluate_mmtgn.py` | ~600 | **NEW**: Standalone evaluation from checkpoint |
 
 ### Modules (`/mm-tgn/modules/`)
 
@@ -948,6 +1072,8 @@ Open: **http://localhost:6006**
 |------|-------|---------------|
 | `generate_embeddings.py` | ~300 | Universal multimodal encoder |
 | `tgn_formatter.py` | ~200 | ratings + features → TGN format |
+| `export_splits.py` | ~200 | **NEW**: Export canonical train/val/test splits |
+| `export_eval_samples.py` | ~150 | **NEW**: Export fixed evaluation samples |
 | `movielens_scraper.py` | ~400 | TMDB API scraper |
 | `movielens_subset.py` | ~200 | ML-Modern subset creation |
 
@@ -957,6 +1083,24 @@ Open: **http://localhost:6006**
 |------|-------|---------------|
 | `utils.py` | ~400 | NeighborFinder, RandEdgeSampler, EarlyStopMonitor |
 | `metrics.py` | ~400 | Recall@K, NDCG@K, MRR, evaluation functions |
+
+### Documentation (`/mm-tgn/`)
+
+| File | Purpose |
+|------|---------|
+| `README.md` | Quick start guide, high-level overview |
+| `ARCHITECTURE.md` | This file - detailed technical specs |
+| `TGN_MODULE_CONFIG.md` | TGN module options and our choices |
+| `TRAINING_STRATEGIES.md` | Training strategies (early stopping, dropout, etc.) |
+
+### Job Scripts (`/mm-tgn/jobs/`)
+
+| File | Purpose |
+|------|---------|
+| `smoke_test.sh` | Quick verification (1 epoch) |
+| `train_ml_*.sh` | Training jobs (no ranking eval) |
+| `eval_ml_*.sh` | Evaluation jobs (from checkpoint) |
+| `submit_all_ml.sh` | Submit all training experiments |
 
 ---
 
@@ -1101,6 +1245,25 @@ python train_mmtgn.py --data-dir data/processed --dataset ml-modern --epochs 1
 ---
 
 ## 📝 Changelog
+
+### 2025-12-05 (v2.5) - Separate Train/Eval Pipeline & Fixed Samples
+- **🔄 NEW: Separate Training & Evaluation Pipeline**
+  - Training jobs (`train_ml_*.sh`) now use `--no-eval-ranking` (faster, 4h)
+  - Evaluation jobs (`eval_ml_*.sh`) load checkpoint and run full ranking metrics
+  - New standalone script: `evaluate_mmtgn.py` for comprehensive evaluation
+- **📊 NEW: Fixed Evaluation Samples**
+  - Added `export_eval_samples.py` to generate reproducible test samples
+  - All models must evaluate on same 5,000 test interactions (seed=42)
+  - Files for teammates: `data/eval_samples/ml-modern_eval_sample.csv`
+- **📈 First Training Results**
+  - SOTA: AP=0.849, AUC=0.872, MRR=0.934 (epoch 4)
+  - Vanilla: AP=0.473, AUC=0.518, MRR=0.757 (early stopped at epoch 9)
+  - **+79% improvement** from multimodal features!
+- **📚 Documentation Updates**
+  - Added "Latest Training Results" section
+  - Added "Separate Training & Evaluation Pipeline" section
+  - Updated file dictionary with new scripts
+  - Added documentation files to file dictionary
 
 ### 2025-12-04 (v2.4) - BPR Loss & OOM Fix
 - **🔧 Loss Function Update**

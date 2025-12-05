@@ -42,17 +42,17 @@ srun --account cse576f25s001_class --partition gpu --gpus 1 --mem 32G --time 01:
     python train_mmtgn.py --data-dir data/processed --dataset ml-modern --epochs 1
 ```
 
-### 3. Run Full Ablation Study
+### 3. Run Full Ablation Study (Two-Phase)
 
 ```bash
-# Submit ALL ablation experiments at once
+# PHASE 1: Submit ALL training experiments (4 jobs, ~4h each)
 ./jobs/submit_all_ml.sh
+# Jobs: Vanilla, SOTA+MLP, SOTA+FiLM, SOTA+Gated
 
-# This submits 4 jobs:
-# 1. Vanilla (random features) - Lower bound
-# 2. SOTA + MLP fusion - Default
-# 3. SOTA + FiLM fusion - Text modulates image
-# 4. SOTA + Gated fusion - Learned attention
+# PHASE 2: After training completes, submit evaluation jobs
+sbatch --dependency=afterok:<TRAIN_JOB_ID> jobs/eval_ml_vanilla.sh
+sbatch --dependency=afterok:<TRAIN_JOB_ID> jobs/eval_ml_sota.sh
+# etc. (see submit_all_ml.sh output for exact commands)
 ```
 
 ### 4. Monitor Progress
@@ -61,11 +61,16 @@ srun --account cse576f25s001_class --partition gpu --gpus 1 --mem 32G --time 01:
 # Check job status
 squeue -u $USER
 
-# View live output
+# View training output
 tail -f logs/train_ml_*.out
 
+# View evaluation output (after Phase 2)
+tail -f logs/eval_ml_*.out
+
 # Results saved to:
-# checkpoints/<run_name>/results.json
+# checkpoints/<run_name>/best_model.pt        # Model checkpoint
+# checkpoints/<run_name>/results_partial.json # Link pred metrics (after train)
+# checkpoints/<run_name>/results_full.json    # All metrics (after eval)
 ```
 
 ---
@@ -181,17 +186,26 @@ mm-tgn/
 
 ---
 
-## 📈 Expected Results
+## 📈 Training Results (December 5, 2025)
 
-| Model | Test AP | Recall@10 | NDCG@10 | Notes |
-|-------|---------|-----------|---------|-------|
-| Vanilla (random) | ~0.55-0.65 | ~0.02-0.05 | ~0.01-0.03 | Lower bound (BPR loss) |
-| MM-TGN (SOTA+MLP) | >0.80 | >0.08-0.15 | >0.05-0.10 | Default (BPR loss) |
-| MM-TGN (SOTA+FiLM) | ~0.82-0.90 | ~0.10-0.18 | ~0.06-0.12 | Best fusion? (BPR loss) |
+### MovieLens (ML-Modern)
 
-**All experiments use BPR (Bayesian Personalized Ranking) loss** - standard for recommender systems, directly optimizes ranking metrics.
+| Model | Val AP | Val AUC | Val MRR | Status |
+|-------|--------|---------|---------|--------|
+| **SOTA (Qwen2+SigLIP)** | **0.849** | **0.872** | **0.934** | ✅ Running |
+| Vanilla (random) | 0.473 | 0.518 | 0.757 | ✅ Completed |
 
-**Key Comparison**: SOTA Inductive AP >> Vanilla Inductive AP (proves cold-start hypothesis)
+### Key Finding: **+79% improvement** from multimodal features!
+
+| Comparison | Result | Interpretation |
+|------------|--------|----------------|
+| SOTA AP > Vanilla AP | 0.849 > 0.473 | ✅ Multimodal features help significantly |
+| SOTA AUC > Vanilla AUC | 0.872 > 0.518 | ✅ Better discrimination |
+| SOTA MRR > Vanilla MRR | 0.934 > 0.757 | ✅ Positive items ranked higher |
+
+**All experiments use BPR (Bayesian Personalized Ranking) loss** - standard for recommender systems.
+
+**Next**: Full ranking metrics (Recall@K, NDCG@K) will be computed by separate evaluation jobs.
 
 ---
 
@@ -205,6 +219,7 @@ TRAIN_RATIO = 0.70
 VAL_RATIO = 0.15
 TEST_RATIO = 0.15
 N_NEGATIVES = 100  # Per positive for ranking
+EVAL_SEED = 42     # For reproducible negative sampling
 METRICS = ["Recall@10", "Recall@20", "NDCG@10", "NDCG@20", "MRR"]
 ```
 
@@ -216,6 +231,18 @@ data/splits/ml-modern/train.csv    # 700K rows
 data/splits/ml-modern/val.csv      # 150K rows
 data/splits/ml-modern/test.csv     # 150K rows
 ```
+
+### ⚠️ Fixed Evaluation Samples (CRITICAL for Fair Comparison)
+
+Full test set (150K) is too slow. Use the **same fixed sample** for all models:
+
+```bash
+# Pre-generated sample (5,000 interactions, seed=42):
+data/eval_samples/ml-modern_eval_sample.csv    # USE THIS
+data/eval_samples/ml-modern_eval_metadata.json # Stats & seed info
+```
+
+**All baselines (LightGCN, SASRec, MMGCN) must evaluate on this exact sample!**
 
 ### Results Location
 
