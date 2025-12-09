@@ -113,6 +113,108 @@ python evaluate_mmtgn.py \
     --seed 42
 ```
 
+### Baselines
+
+To ensure fair comparison, we provide scripts to train and evaluate state-of-the-art baselines (**LightGCN**, **SASRec**, **MMGCN**) using the exact same Global Temporal Split (GTS) as MM-TGN.
+
+#### 1. Prepare Baseline Data
+
+First, convert the standard GTS datasets into the specific formats required by each model (e.g., `.txt` sequences for SASRec, aligned `.npy` features for MMGCN).
+```bash
+# LightGCN: Creates adjacency lists in lightgcn/Data/<dataset>-gts/
+python baseline_scripts/build_lightgcn_gts.py
+
+# SASRec: Creates sequential txt files in sasrec/data/
+python baseline_scripts/build_sasrec_gts.py
+
+# MMGCN: Creates aligned visual/text features in mmgcn/Data/<dataset>-gts/
+python baseline_scripts/build_mmgcn_gts.py
+```
+
+#### 2. Train Baselines
+
+We provide the exact commands to reproduce the SOTA baselines using the hyperparameters defined in our benchmarking.
+
+**LightGCN:**
+```bash
+cd lightgcn
+python LightGCN.py \
+  --data_path ./Data/ \
+  --dataset ml-modern-gts \
+  --model_type lightgcn \
+  --alg_type lightgcn \
+  --adj_type pre \
+  --pretrain 0 \
+  --epoch 60 \
+  --embed_size 64 \
+  --layer_size "[64,64,64]" \
+  --regs "[1e-4]" \
+  --lr 1e-3 \
+  --batch_size 1024 \
+  --Ks "[10]" \
+  > lightgcn_train_log.txt
+cd ..
+```
+
+**SASRec:**
+```bash
+cd sasrec
+python main.py \
+  --dataset ml-modern-gts \
+  --train_dir ml-modern-gts_runs \
+  --batch_size 128 \
+  --lr 0.001 \
+  --maxlen 50 \
+  --hidden_units 64 \
+  --num_blocks 2 \
+  --num_epochs 200 \
+  --num_heads 1 \
+  --dropout_rate 0.5 \
+  --l2_emb 0.0 \
+  > sasrec_train_log.txt
+cd ..
+```
+
+**MMGCN:**
+```bash
+cd mmgcn
+python main.py \
+  --data_path ml-modern-gts \
+  --save_file mlm_mmgcn_gts \
+  --dim_E 64 \
+  --l_r 3e-4 \
+  --weight_decay 3e-5 \
+  --batch_size 1024 \
+  --num_epoch 20 \
+  --topK 10 \
+  --has_v True \
+  --has_t True \
+  --has_a False \
+  --PATH_weight_save ./Data/ml-modern-gts/mmgcn_ml-modern-gts.pt \
+  > mmgcn_train_log.txt
+cd ..
+```
+
+#### 3. Unified Evaluation
+
+Once trained, use the unified evaluator to benchmark all models against the fixed test subset (eval_samples_final). This ensures apples-to-apples comparison with MM-TGN.
+```bash
+# Evaluate LightGCN
+python baseline_scripts/run_unified_eval.py \
+  --model lightgcn \
+  --dataset ml-modern
+
+# Evaluate SASRec
+python baseline_scripts/run_unified_eval.py \
+  --model sasrec \
+  --dataset ml-modern
+
+# Evaluate MMGCN
+python baseline_scripts/run_unified_eval.py \
+  --model mmgcn \
+  --dataset ml-modern
+```
+
 ### SLURM (HPC Cluster)
 
 ```bash
