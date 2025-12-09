@@ -128,7 +128,7 @@ sbatch jobs/eval_cloth_sota.sh
 ## 🏗️ Architecture
 
 <p align="center">
-  <img src="docs/architecture.png" alt="MM-TGN Architecture" width="800">
+  <img src="assets/MM-TGNArch.png" alt="MM-TGN Architecture" width="800">
 </p>
 
 ### Components
@@ -308,7 +308,7 @@ If you find this work useful, please cite:
 ```bibtex
 @article{mmtgn2025,
   title={MM-TGN: A Multimodal Temporal Graph Network for Sequential Recommendation},
-  author={Huseynli, Murad and Kulshrestha, Aarya and Ravichandran, Srikrishnan},
+  author={Huseynli Murad, Kulshrestha Aarya, and Ravichandran, Srikrishnan},
   journal={University of Michigan CSE 576 Course Project},
   year={2025}
 }
