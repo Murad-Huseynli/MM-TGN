@@ -77,6 +77,64 @@ conda activate mmtgn
 # Install dependencies
 pip install -r requirements.txt
 ```
+### Option 2: Environment A — LightGCN & SASRec Baselines
+
+**For:** LightGCN, SASRec, GRU4Rec, and other TensorFlow 2.7-based models
+
+These models depend on TensorFlow 2.7, which requires CUDA 11.2 + CuDNN 8.1. On HPC systems, these dependencies are provided as modules.
+
+#### Step 1: Load HPC modules
+```bash
+module load python3.9-anaconda/2021.11
+module load cuda/11.2.2
+module load cudnn/11.2-v8.1.1
+module load tensorflow/2.7.0
+```
+
+#### Step 2: Create virtual environment
+```bash
+python3 -m venv env_tf27
+source env_tf27/bin/activate
+```
+
+#### Step 3: Install dependencies
+```bash
+pip install --upgrade pip
+pip install -r baseline_requirements.txt
+```
+
+> ⚠️ **Important:** Do not install TensorFlow, CUDA, or CuDNN via pip—use the HPC modules.
+
+---
+
+### Option 3: Environment B — MMGCN Baseline
+
+**For:** MMGCN (Multimodal GCN baseline)
+
+MMGCN requires both PyTorch 2.2 (with CUDA 12.1) and TensorFlow 2.7, so it must be isolated in its own environment.
+
+#### Step 1: Create virtual environment
+```bash
+python3 -m venv env_mmgcn
+source env_mmgcn/bin/activate
+```
+
+#### Step 2: Install dependencies
+```bash
+pip install --upgrade pip
+pip install -r mmgcn_requirements.txt
+```
+
+---
+
+### Environment Summary
+
+| Model      | Framework                          | Environment   | Setup                              |
+|------------|------------------------------------|---------------|------------------------------------|
+| MM-TGN     | PyTorch (main)                     | `mmtgn`       | Option 1 (conda)                   |
+| LightGCN   | TensorFlow 2.7                     | `env_tf27`    | Option 2 (venv + HPC modules)      |
+| SASRec     | TensorFlow 2.7                     | `env_tf27`    | Option 2 (venv + HPC modules)      |
+| MMGCN      | PyTorch 2.2 + PyG + TF 2.7         | `env_mmgcn`   | Option 3 (venv)                    |
 
 ### Training
 
