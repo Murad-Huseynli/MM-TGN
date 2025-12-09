@@ -298,6 +298,35 @@ mm-tgn/
 ├── mmtgn.py                # MM-TGN model architecture
 ├── dataset.py              # Data loading & preprocessing
 │
+├── baseline_scripts/
+│   ├── build_lightgcn_gts.py
+│   ├── build_mmgcn_gts.py
+│   ├── build_sasrec_gts.py
+│   ├── data_loader.py
+│   ├── eval_sampled.py
+│   ├── eval_subset.py
+│   └── run_unified_eval.py
+│
+├── sasrec
+│   ├── main.py
+│   ├── model.py
+│   ├── modules.py
+│   ├── sampler.py
+│   └── util.py
+│
+├── lightgcn
+│   ├── evaluate_loo.py
+│   ├── LightGCN.py
+│   └── utility
+│
+├── mmgcn
+│   ├── BaseModel.py
+│   ├── Dataset.py
+│   ├── Full_vt.py
+│   ├── main.py
+│   ├── Model_MMGCN.py
+│   └── Train.py
+│
 ├── modules/                # Neural network modules
 │   ├── embedding.py        # Fusion heads (MLP, FiLM, Gated)
 │   ├── memory.py           # TGN memory module
