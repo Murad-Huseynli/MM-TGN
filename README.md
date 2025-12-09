@@ -307,10 +307,10 @@ If you find this work useful, please cite:
 
 ```bibtex
 @article{mmtgn2025,
-  title={MM-TGN: A Multimodal Temporal Graph Network for Sequential Recommendation},
-  author={Huseynli Murad, Kulshrestha Aarya, and Ravichandran, Srikrishnan},
-  journal={University of Michigan CSE 576 Course Project},
-  year={2025}
+  title   = {MM-TGN: A Multimodal Temporal Graph Network for Sequential Recommendation},
+  author  = {Huseynli, Murad and Kulshrestha, Aarya and Ravichandran, Srikrishnan},
+  journal = {University of Michigan CSE 576 Course Project},
+  year    = {2025}
 }
 ```
 
